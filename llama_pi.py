@@ -1,25 +1,25 @@
 import time
-import psutil
 import os
 import csv
+import psutil
 import numpy as np
+import multiprocessing
 from datasets import load_dataset
 from llama_cpp import Llama
 
 MODEL_DIR = "/home/pi/win_models"
-GEMMA_MODELS = [
-    "gemma-4-E2B-it-Q5_K_M.gguf",
-    "gemma-4-E2B-it-Q4_K_M.gguf",
-    "gemma-4-E2B-it-Q3_K_M.gguf"
+LLAMA_MODELS = [
+    "llama3.2-3b-q5_k_m.gguf",
+    "llama3.2-3b-q4_k_m.gguf",
+    "llama3.2-3b-q3_k_m.gguf"
 ]
-OUTPUT_FILE = "gemma_performance_detailed.csv"
+OUTPUT_FILE = "llama_pi_2048_128.csv"
 
-def get_memory_usage():
-    process = psutil.Process(os.getpid())
-    return process.memory_info().rss / (1024 * 1024)
+def get_current_memory():
+    return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
 
 def load_bench_prompts(num_samples=20):
-    print("데이터셋 4종 로드 및 프롬프트 추출 중...")
+    print("데이터셋 4종 로드 및 프롬프트 추출.")
     prompts_dict = {}
 
     ds_mmlu = load_dataset("cais/mmlu", "college_computer_science", split="test").select(range(num_samples))
@@ -48,8 +48,8 @@ def load_bench_prompts(num_samples=20):
 
     return prompts_dict
 
-def format_gemma_prompt(prompt):
-    return f"<|turn>user\n{prompt}<turn|>\n<|turn>model\n"
+def format_llama_prompt(prompt):
+    return f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
 
 def run_performance_bench(model_path, datasets_prompts):
     model_name = os.path.basename(model_path)
@@ -61,14 +61,14 @@ def run_performance_bench(model_path, datasets_prompts):
     
     llm = Llama(
         model_path=model_path,
-        n_threads=4, 
+        n_threads=4,
         n_ctx=2048,
         verbose=False
     )
     load_time = time.perf_counter() - start_load
     
     def _measure_inference(prompt_text, max_tokens=128):
-        prompt_formatted = format_gemma_prompt(prompt_text)
+        prompt_formatted = format_llama_prompt(prompt_text)
         prompt_tokens = len(llm.tokenize(prompt_formatted.encode('utf-8')))
         
         start_time = time.perf_counter()
@@ -76,89 +76,114 @@ def run_performance_bench(model_path, datasets_prompts):
         output = llm(
             prompt_formatted,
             max_tokens=max_tokens,
-            stop=["<turn|>"], 
+            stop=["<|eot_id|>"], 
             stream=True
         )
         
         first_token_time = None
-        token_count = 0
+        generated_text = ""
         
         for chunk in output:
             if first_token_time is None:
                 first_token_time = time.perf_counter()
-            token_count += 1
+            generated_text += chunk['choices'][0]['text']
             
         end_time = time.perf_counter()
+        
+        generated_token_count = len(llm.tokenize(generated_text.encode('utf-8')))
         
         ttft = first_token_time - start_time if first_token_time else 0
         decode_time = end_time - first_token_time if first_token_time else 0
         
         prefill_tps = prompt_tokens / ttft if ttft > 0 else 0
-        decode_tps = (token_count - 1) / decode_time if decode_time > 0 and token_count > 1 else 0
+        decode_tps = (generated_token_count - 1) / decode_time if decode_time > 0 and generated_token_count > 1 else 0
         
         return {
             "prompt_tokens": prompt_tokens,
+            "generated_tokens": generated_token_count,
             "ttft": ttft,
             "prefill_tps": prefill_tps,
             "decode_tps": decode_tps,
-            "peak_mem": get_memory_usage()
+            "current_mem": get_current_memory()
         }
 
-    print("  [워밍업] 메모리 매핑 및 콜드 스타트 지연 측정 중...")
+    print("  [워밍업] 메모리 매핑 및 콜드 스타트 지연 측정.")
     cold_result = _measure_inference("Hello. Reply with 'Hi' only.", max_tokens=10)
-    print(f"  -> ❄️ 콜드 스타트 TTFT: {cold_result['ttft']:.3f}s\n")
+    print(f"  -> 콜드 스타트 TTFT: {cold_result['ttft']:.3f}s (Decode: {cold_result['decode_tps']:.2f} TPS)\n")
 
     dataset_metrics = []
+    dataset_keys = list(datasets_prompts.keys())
 
-    for dataset_name, prompts in datasets_prompts.items():
+    for idx, (dataset_name, prompts) in enumerate(datasets_prompts.items()):
         print(f"  [{dataset_name}] 테스트 진행 중 (총 {len(prompts)}개)...")
         results = []
+        
+        dataset_peak_mem = 0
         
         for i, prompt in enumerate(prompts):
             res = _measure_inference(prompt)
             results.append(res)
-            # 모든 순서의 토큰 수와 TPS를 출력합니다!
-            print(f"    - {i+1}번 | 프롬프트 토큰: {res['prompt_tokens']} | TTFT: {res['ttft']:.3f}s | Decode: {res['decode_tps']:.2f} TPS")
-
-        # 20개의 개별 결과를 쉼표로 연결된 문자열로 만듭니다. (CSV에 저장하기 위함)
+            
+            if res['current_mem'] > dataset_peak_mem:
+                dataset_peak_mem = res['current_mem']
+                
+            print(f"    - {i+1}번 | 프롬프트: {res['prompt_tokens']} | 생성: {res['generated_tokens']} | TTFT: {res['ttft']:.3f}s | TPS: {res['decode_tps']:.2f} | 현재 메모리: {res['current_mem']:.1f} MB") 
+            
         all_tokens_str = ", ".join([str(r['prompt_tokens']) for r in results])
         all_ttft_str = ", ".join([f"{r['ttft']:.3f}" for r in results])
         all_tps_str = ", ".join([f"{r['decode_tps']:.2f}" for r in results])
-
+            
         metrics = {
             "Model": model_name,
             "Dataset": dataset_name,
             "Total Prompt Tokens": sum([r['prompt_tokens'] for r in results]),
             "Avg Prompt Tokens": np.mean([r['prompt_tokens'] for r in results]),
             "All Prompt Tokens": all_tokens_str,
-            "Cold Start TTFT (s)": cold_result['ttft'] if dataset_name == "MMLU" else "-", # 콜드스타트는 첫 데이터셋에만 기록
+            "Cold Start TTFT (s)": cold_result['ttft'] if dataset_name == "MMLU" else "-", 
             "Avg TTFT (s)": np.mean([r['ttft'] for r in results]),
             "All TTFTs (s)": all_ttft_str,
             "Avg Prefill TPS": np.mean([r['prefill_tps'] for r in results]),
             "Avg Decode TPS": np.mean([r['decode_tps'] for r in results]),
             "All Decode TPS": all_tps_str,
-            "Peak Memory (MB)": np.max([r['peak_mem'] for r in results])
+            "Dataset Peak Memory (MB)": dataset_peak_mem
         }
         dataset_metrics.append(metrics)
-        print(f"  => [{dataset_name}] 총 프롬프트 토큰: {metrics['Total Prompt Tokens']} | 평균 프롬프트 토큰: {metrics['Avg Prompt Tokens']:.1f} | 평균 TTFT: {metrics['Avg TTFT (s)']:.3f}s | 평균 Decode TPS: {metrics['Avg Decode TPS']:.2f}\n")
+        print(f"  => [{dataset_name}] 평균 Decode TPS: {metrics['Avg Decode TPS']:.2f} | 데이터셋 피크 메모리: {dataset_peak_mem:.1f} MB")
 
-    return dataset_metrics
+        file_exists = os.path.isfile(OUTPUT_FILE)
+        with open(OUTPUT_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=metrics.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(metrics)
+            
+        if idx < len(dataset_keys) - 1:
+            cooldown_seconds = 20
+            print(f"\n  {cooldown_seconds}초 대기.")
+            time.sleep(cooldown_seconds)
+            print("  다음 테스트 진행.\n")
+
+def benchmark_worker(model_path, datasets_prompts):
+    run_performance_bench(model_path, datasets_prompts)
 
 if __name__ == "__main__":
     datasets_prompts = load_bench_prompts(num_samples=20)
-    all_summary = []
+    
+    if os.path.exists(OUTPUT_FILE):
+        os.remove(OUTPUT_FILE)
 
-    for model_name in GEMMA_MODELS:
+    for model_name in LLAMA_MODELS:
         full_path = os.path.join(MODEL_DIR, model_name)
         if os.path.exists(full_path):
-            summary_list = run_performance_bench(full_path, datasets_prompts)
-            all_summary.extend(summary_list)
-        else:
-            print(f"[경고] 파일을 찾을 수 없습니다: {full_path}")
+            print(f"\n서브프로세스 할당: '{model_name}'")
 
-    if all_summary:
-        with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=all_summary[0].keys())
-            writer.writeheader()
-            writer.writerows(all_summary)
-        print(f"\n✅ 전체 벤치마크 완료! 상세 결과가 '{OUTPUT_FILE}'에 저장되었습니다.")
+            p = multiprocessing.Process(target=benchmark_worker, args=(full_path, datasets_prompts))
+            p.start()
+            p.join()
+            
+            print(f"\n서브프로세스 종료. 메모리 반환. 20초 대기.")
+            time.sleep(20)
+        else:
+            print(f"[에러] File Not Found {full_path}")
+
+    print(f"\n벤치마크 결과 '{OUTPUT_FILE}' 저장.")

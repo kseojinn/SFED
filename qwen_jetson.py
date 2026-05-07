@@ -1,27 +1,25 @@
 import time
 import os
 import csv
-import psutil        # 실시간 데이터셋별 피크 측정을 위해 사용
+import psutil
 import numpy as np
 import multiprocessing
 from datasets import load_dataset
 from llama_cpp import Llama
 
-# 1. 경로 및 모델 설정
 MODEL_DIR = "/home/jin/win_models"
 QWEN_MODELS = [
     "Qwen3-1.7B-Q5_K_M.gguf",
     "Qwen3-1.7B-Q4_K_M.gguf",
     "Qwen3-1.7B-Q3_K_M.gguf"
 ]
-OUTPUT_FILE = "qwen_2048_512.csv"
+OUTPUT_FILE = "qwen_2048_128.csv"
 
 def get_current_memory():
-    """현재 시점의 프로세스 메모리 사용량(MB) 반환"""
     return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
 
 def load_bench_prompts(num_samples=20):
-    print("데이터셋 4종 로드 및 프롬프트 추출 중...")
+    print("데이터셋 4종 로드 및 프롬프트 추출.")
     prompts_dict = {}
 
     ds_mmlu = load_dataset("cais/mmlu", "college_computer_science", split="test").select(range(num_samples))
@@ -50,7 +48,6 @@ def load_bench_prompts(num_samples=20):
 
     return prompts_dict
 
-# Qwen ChatML 전용 프롬프트 포맷
 def format_qwen_prompt(prompt):
     return f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
 
@@ -62,7 +59,6 @@ def run_performance_bench(model_path, datasets_prompts):
     
     start_load = time.perf_counter()
     
-    # 젯슨 맞춤형 설정 (GPU 풀가동)
     llm = Llama(
         model_path=model_path,
         n_gpu_layers=-1, 
@@ -71,13 +67,12 @@ def run_performance_bench(model_path, datasets_prompts):
     )
     load_time = time.perf_counter() - start_load
     
-    def _measure_inference(prompt_text, max_tokens=512):
+    def _measure_inference(prompt_text, max_tokens=128):
         prompt_formatted = format_qwen_prompt(prompt_text)
         prompt_tokens = len(llm.tokenize(prompt_formatted.encode('utf-8')))
         
         start_time = time.perf_counter()
         
-        # Qwen 전용 종료 토큰 적용
         output = llm(
             prompt_formatted,
             max_tokens=max_tokens,
@@ -103,7 +98,6 @@ def run_performance_bench(model_path, datasets_prompts):
         prefill_tps = prompt_tokens / ttft if ttft > 0 else 0
         decode_tps = (generated_token_count - 1) / decode_time if decode_time > 0 and generated_token_count > 1 else 0
         
-        # [핵심] 해당 문제가 다 끝난 직후의 현재 메모리를 찍어서 넘김
         return {
             "prompt_tokens": prompt_tokens,
             "generated_tokens": generated_token_count,
@@ -113,9 +107,9 @@ def run_performance_bench(model_path, datasets_prompts):
             "current_mem": get_current_memory() 
         }
 
-    print("  [워밍업] GPU 초기화 및 콜드 스타트 지연 측정 중...")
+    print("  [워밍업] GPU 초기화 및 콜드 스타트 지연 측정.")
     cold_result = _measure_inference("Hello. Reply with 'Hi' only.", max_tokens=10)
-    print(f"  -> ❄️ 콜드 스타트 TTFT: {cold_result['ttft']:.3f}s (Decode: {cold_result['decode_tps']:.2f} TPS)\n")
+    print(f"  -> 콜드 스타트 TTFT: {cold_result['ttft']:.3f}s (Decode: {cold_result['decode_tps']:.2f} TPS)\n")
 
     dataset_metrics = []
     dataset_keys = list(datasets_prompts.keys())
@@ -124,13 +118,12 @@ def run_performance_bench(model_path, datasets_prompts):
         print(f"  [{dataset_name}] 테스트 진행 중 (총 {len(prompts)}개)...")
         results = []
         
-        dataset_peak_mem = 0  # [추가됨] 이 데이터셋 구간의 최고 메모리를 기록할 변수
+        dataset_peak_mem = 0
         
         for i, prompt in enumerate(prompts):
             res = _measure_inference(prompt)
             results.append(res)
             
-            # [추가됨] 방금 측정한 메모리가 지금까지의 피크보다 높으면 갱신
             if res['current_mem'] > dataset_peak_mem:
                 dataset_peak_mem = res['current_mem']
                 
@@ -152,12 +145,11 @@ def run_performance_bench(model_path, datasets_prompts):
             "Avg Prefill TPS": np.mean([r['prefill_tps'] for r in results]),
             "Avg Decode TPS": np.mean([r['decode_tps'] for r in results]),
             "All Decode TPS": all_tps_str,
-            "Dataset Peak Memory (MB)": dataset_peak_mem  # [변경됨] 데이터셋별 피크 기록
+            "Dataset Peak Memory (MB)": dataset_peak_mem
         }
         dataset_metrics.append(metrics)
         print(f"  => [{dataset_name}] 평균 Decode TPS: {metrics['Avg Decode TPS']:.2f} | 📈 데이터셋 피크 메모리: {dataset_peak_mem:.1f} MB")
 
-        # 파일 이어쓰기 (자식 프로세스들이 각자 결과를 알아서 누적함)
         file_exists = os.path.isfile(OUTPUT_FILE)
         with open(OUTPUT_FILE, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=metrics.keys())
@@ -167,19 +159,15 @@ def run_performance_bench(model_path, datasets_prompts):
             
         if idx < len(dataset_keys) - 1:
             cooldown_seconds = 15
-            print(f"\n  🌡️ 쿨다운 {cooldown_seconds}초 대기...")
+            print(f"\n  {cooldown_seconds}초 대기.")
             time.sleep(cooldown_seconds)
-            print("  다음 테스트를 진행합니다.\n")
+            print("  다음 테스트 진행.\n")
 
-
-# [추가됨] 자식 프로세스 실행용 래퍼(Wrapper) 함수
 def benchmark_worker(model_path, datasets_prompts):
-    """독립된 프로세스 공간에서 벤치마크를 실행합니다."""
     run_performance_bench(model_path, datasets_prompts)
 
 
 if __name__ == "__main__":
-    # 데이터셋은 메인 프로세스에서 1번만 로드하여 자식들에게 복사해 넘겨줌 (시간 절약)
     datasets_prompts = load_bench_prompts(num_samples=20)
     
     if os.path.exists(OUTPUT_FILE):
@@ -188,16 +176,15 @@ if __name__ == "__main__":
     for model_name in QWEN_MODELS:
         full_path = os.path.join(MODEL_DIR, model_name)
         if os.path.exists(full_path):
-            print(f"\n🚀 서브프로세스 할당: '{model_name}'")
+            print(f"\n서브프로세스 할당: '{model_name}'")
             
-            # 모델을 독립된 파이썬 자식 프로세스로 실행 (VRAM 완전 초기화 보장)
             p = multiprocessing.Process(target=benchmark_worker, args=(full_path, datasets_prompts))
             p.start()
             p.join()
             
-            print(f"\n🛑 서브프로세스 종료. 메모리 100% 반환 완료. 다음 모델을 위해 15초 대기합니다...")
+            print(f"\n서브프로세스 종료. 메모리 반환. 15초 대기.")
             time.sleep(15)
         else:
-            print(f"[경고] 파일을 찾을 수 없습니다: {full_path}")
+            print(f"[에러] File Not Found {full_path}")
 
-    print(f"\n🎉 벤치마크 완료! '{OUTPUT_FILE}'을 확인하세요.")
+    print(f"\n벤치마크 결과 '{OUTPUT_FILE}' 저장.")

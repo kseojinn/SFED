@@ -23,15 +23,15 @@
 
 ## Models, Datasets, and Metrics used
 **Models** * Quantization(Q5_K_M, Q4_K_M, Q3_K_M)
-- Meta: Llama-3.2-3B-Instruct
-- Goggle: gemma-4-E2B-it
-- Alibaba: Qwen3-1.7B
+- Meta: [Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)
+- Google: [gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it)
+- Alibaba: [Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B)
 
 **Datasets**
-- Knowledge: MMLU
-- Reasoning: ARC-Challenge
-- Mathematics: GSM8K
-- Programming: HumanEval
+- Knowledge: [MMLU](https://huggingface.co/datasets/cais/mmlu/viewer/abstract_algebra/test?row=1)
+- Reasoning: [ARC-Challenge](https://huggingface.co/datasets/allenai/ai2_arc)
+- Mathematics: [GSM8K](https://huggingface.co/datasets/openai/gsm8k)
+- Programming: [HumanEval](https://huggingface.co/datasets/openai/openai_humaneval)
 
 **Metrics**
 - Memory Usage

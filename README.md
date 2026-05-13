@@ -1,9 +1,10 @@
 # SLMs For Edge Devices
-> Edge Devices used: Jetson Orin Nano Super (NVIDIA), Raspberry Pi5
+- Edge Devices used: Jetson Orin Nano Super (NVIDIA), Raspberry Pi5
+- The goal of this project is to experiment with hardware bottlenecks and quantization efficiency when deploying Small Language Models (SLMs) in resource-constrained edge computing environments.
 
-### File Structure
+## File Structure
 ```bash
-├── data
+├── data (results)
 │   └── ---.csv * 18
 ├── eval
 │   ├── gemma_jetson.py
@@ -19,3 +20,42 @@
 │   └── ttft.png
 └── README.md
 ```
+
+## Models, Datasets, and Metrics used
+**Models** * Quantization(Q5_K_M, Q4_K_M, Q3_K_M)
+- Meta: Llama-3.2-3B-Instruct
+- Goggle: gemma-4-E2B-it
+- Alibaba: Qwen3-1.7B
+
+**Datasets**
+- Knowledge: MMLU
+- Reasoning: ARC-Challenge
+- Mathematics: GSM8K
+- Programming: HumanEval
+
+**Metrics**
+- Memory Usage
+- Prefill TPS
+- Decode TPS
+- TTFT
+
+## Conclusion - Concise
+**The Sweet Spot is Q4_K_M quantization**.
+- Memory bandwidth defense
+- Practical computational throughput (TPS)
+
+**Qwen3-1.7B** demonstrated the most outstanding deployment efficiency in resource-constrained edge environments.
+
+## Conclusion - Detailed
+**The Paradox of Extreme Low-Bit Quantization (Dequantization Overhead)**
+* We discovered a performance inversion where the Q3_K_M quantization level, despite having the smallest model size, actually caused a drop in computational throughput (TPS). 
+* This occurs because 3-bit data crosses memory byte boundaries, forcing complex bit-masking and shifting operations when loading data into registers.
+* Consequently, we confirmed that this dequantization computation overhead completely overwhelms the benefits of memory bandwidth reduction, acting as a major system bottleneck.
+
+**Heterogeneous Hardware Bottlenecks by Processing Stage (Prefill vs. Decode)**
+* **Prefill Stage (GPU Dominance):** Because a large volume of prompt tokens must be processed simultaneously, the GPU (Jetson), which is optimized for parallel computing, significantly outperformed the CPU (Raspberry Pi 5)
+* **Decode Stage (CPU Resilience):** The decoding process, which generates tokens sequentially, is dominated by **memory bandwidth** rather than pure compute power. Therefore, we demonstrated that a pure CPU environment with a simpler memory architecture suffers less latency loss from sequential loads, successfully maintaining stable performance.
+
+**Critical Storage I/O Bottleneck (Cold Start)**
+* We observed severe latency (up to 33 seconds) during the initial loading of model weights from storage to RAM upon an inference request.
+* For on-device systems requiring real-time interaction, implementing a daemon-based architecture that keeps the weights constantly resident in memory is essential.

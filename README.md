@@ -1,6 +1,5 @@
 # SLMs For Edge Devices
 > Edge Devices used: Jetson Orin Nano Super (NVIDIA), Raspberry Pi5
----
 
 ### File Structure
 ```bash

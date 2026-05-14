@@ -2,6 +2,9 @@
 - Edge Devices used: Jetson Orin Nano Super (NVIDIA), Raspberry Pi5
 - The goal of this project is to experiment with hardware bottlenecks and quantization efficiency when deploying Small Language Models (SLMs) in resource-constrained edge computing environments.
 
+## Tech Stack
+Python, llama.cpp, psutil, Numpy
+
 ## File Structure
 ```bash
 ├── data (results)

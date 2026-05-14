@@ -42,14 +42,7 @@ Python, llama.cpp, psutil, Numpy
 - Decode TPS
 - TTFT
 
-## Conclusion - Concise
-**The Sweet Spot is Q4_K_M quantization**.
-- Memory bandwidth defense
-- Practical computational throughput (TPS)
-
-**Qwen3-1.7B** demonstrated the most outstanding deployment efficiency in resource-constrained edge environments.
-
-## Conclusion - Detailed
+## Experimental Results
 **The Paradox of Extreme Low-Bit Quantization (Dequantization Overhead)**
 * We discovered a performance inversion where the Q3_K_M quantization level, despite having the smallest model size, actually caused a drop in computational throughput (TPS). 
 * This occurs because 3-bit data crosses memory byte boundaries, forcing complex bit-masking and shifting operations when loading data into registers.
@@ -62,3 +55,10 @@ Python, llama.cpp, psutil, Numpy
 **Critical Storage I/O Bottleneck (Cold Start)**
 * We observed severe latency (up to 33 seconds) during the initial loading of model weights from storage to RAM upon an inference request.
 * For on-device systems requiring real-time interaction, implementing a daemon-based architecture that keeps the weights constantly resident in memory is essential.
+
+## Conclusion - Concise
+**The Sweet Spot is Q4_K_M quantization**.
+- Memory bandwidth defense
+- Practical computational throughput (TPS)
+
+**Qwen3-1.7B** demonstrated the most outstanding deployment efficiency in resource-constrained edge environments.

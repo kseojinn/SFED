@@ -56,7 +56,7 @@ Python, llama.cpp, psutil, Numpy
 * We observed severe latency (up to 33 seconds) during the initial loading of model weights from storage to RAM upon an inference request.
 * For on-device systems requiring real-time interaction, implementing a daemon-based architecture that keeps the weights constantly resident in memory is essential.
 
-## Conclusion - Concise
+## Conclusion
 **The Sweet Spot is Q4_K_M quantization**.
 - Memory bandwidth defense
 - Practical computational throughput (TPS)

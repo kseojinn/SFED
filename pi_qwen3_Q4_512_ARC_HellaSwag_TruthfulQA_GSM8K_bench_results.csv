@@ -1,0 +1,5 @@
+Model,Dataset,Max_Tokens,Runs,Model_Load_Time (s),Cold_Start_TTFT (s),TTFT_Mean (s),TTFT_Std (s),Prefill_TPS_Mean,Prefill_TPS_Std,Decode_TPS_Mean,Decode_TPS_Std,Peak_Mem_Mean (MB),Peak_Mem_Std (MB)
+Qwen3-1.7B-Q4_K_M.gguf,ARC,512,3,16.51,0.3104,1.3234,0.0003,69.9895,0.016,9.4558,0.0109,2630.4,2.6
+Qwen3-1.7B-Q4_K_M.gguf,HellaSwag,512,3,16.51,0.3104,1.8516,0.0003,68.0545,0.0131,9.3945,0.0074,2648.0,0.8
+Qwen3-1.7B-Q4_K_M.gguf,TruthfulQA,512,3,16.51,0.3104,0.4566,0.0002,92.5242,0.0304,9.6144,0.0081,2648.6,0.0
+Qwen3-1.7B-Q4_K_M.gguf,GSM8K,512,3,16.51,0.3104,1.4791,0.0,69.1547,0.0019,9.3911,0.0079,2649.2,0.8

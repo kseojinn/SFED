@@ -1,0 +1,2 @@
+Model,Dataset,Max_Tokens,Runs,Model_Load_Time (s),Cold_Start_TTFT (s),TTFT_Mean (s),TTFT_Std (s),Prefill_TPS_Mean,Prefill_TPS_Std,Decode_TPS_Mean,Decode_TPS_Std,Peak_Mem_Mean (MB),Peak_Mem_Std (MB)
+Qwen3-1.7B-Q4_K_M.gguf,MMLU,512,3,16.17,0.3043,1.8404,0.0003,67.1217,0.0031,9.3381,0.0091,2640.3,5.5
